@@ -1,0 +1,3 @@
+# server_init
+云服务器初始化使用的脚本
+服务器版本centos6，wordpress和ssr服务器端初始化脚本和acme.sh申请SSL证书的脚本。
