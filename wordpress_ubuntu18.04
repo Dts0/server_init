@@ -1,0 +1,97 @@
+#!/bin/sh
+
+#if [ $# -ne 4 ]; then
+#    echo "Usage: sudo sh $0 db_name user_name user_passwd mysql_root_passwd"
+#	exit 0
+#fi
+
+db_name="wp`date +%s`"
+user_name=$db_name
+user_passwd=`date |md5sum |cut -c '1-12'`
+sleep 1
+mysql_root_passwd=`date |md5sum |cut -c '1-12'`
+
+install_dependency(){
+    #1. install the dependency of wordpress
+    sudo apt-get install -y apache2
+    sudo apt-get install -y libapache2-mod-php5 php5
+    sudo apt-get install -y mysql-server mysql-common
+    sudo apt-get install -y php5-mysql
+}
+
+config_mysql(){
+    #2. configure mysql
+sudo apt-get install -y expect
+expect << EOF
+set timeout 100
+spawn mysql -u root -p
+expect {
+    "Enter password:" {send "$mysql_root_passwd\r"}
+}
+expect "mysql>"
+send "create database $db_name;\r"
+expect "mysql>"
+send "create user $user_name@localhost identified by '$user_passwd';\r"
+expect "mysql>"
+send "grant all privileges on $db_name.* to $user_name@localhost;\r"
+expect "mysql>"
+send "flush privileges;\r"
+expect "mysql>"
+send "exit\r"
+EOF
+}
+
+install_wordpress(){
+    #3. install wordpress
+    #3.1 download the wordpress
+    wget -c http://wordpress.org/latest.tar.gz
+    #3.2 extract the files to rebuild wordpress
+    tar xvfz latest.tar.gz
+    sudo rm -f latest.tar.gz
+    #3.3 install some packages to allow you to work with images, install plugins and update portions of your site using ssh.
+    sudo apt-get install -y php5-gd libssh2-php
+}
+
+config_wordpress(){
+    #4. configure wordpress
+    sed "s/database_name_here/$db_name/" ./wordpress/wp-config-sample.php | sed "s/username_here/$user_name/" | sed "s/password_here/$user_passwd/" >> ./wordpress/wp-config.php
+}
+
+copy_files(){
+    #5. copy files to the document root
+    sudo rsync -avP ./wordpress /var/www/html/
+    sudo rm -rf ./wordpress
+    sudo mkdir /var/www/html/wordpress/wp-content/uploads
+    sudo chown -R www-data:www-data /var/www/html/wordpress/*
+}
+
+install_mysql_extension(){
+    #6. when the problem "Your PHP installation appears to be missing the MySQL extension which is required by WordPress" occurs, you need this.
+    sudo sed -i "s/extension=\/path\/to\/extension\/msql.so/extension=mysql.so/" /etc/php5/apache2/php.ini
+}
+
+modify_apache_to_allow_url_rewrites(){
+    date_time=$(date +%y%m%d%H%M)
+    sudo cp /etc/apache2/sites-available/000-default.conf "/etc/apache2/sites-available/000-default.conf.$date_time.bak"
+    sudo sed -i "/<\/VirtualHost>/i \        ServerName 127.0.0.1\n        <Directory \/var\/www\/html\/wordpress\/>\n            AllowOverride All\n        <\/Directory>" /etc/apache2/sites-available/000-default.conf
+    sudo a2enmod rewrite
+    sudo echo 'ServerName localhost' >> /etc/apache2/apache2.conf
+    sudo service apache2 restart
+}
+
+create_htaccess_file(){
+    touch /var/www/html/wordpress/.htaccess
+    sudo chown :www-data /var/www/html/wordpress/.htaccess
+    chmod 664 /var/www/html/wordpress/.htaccess
+}
+
+#install_dependency
+config_mysql
+install_wordpress
+config_wordpress
+copy_files
+install_mysql_extension
+modify_apache_to_allow_url_rewrites
+create_htaccess_file
+
+exit 0

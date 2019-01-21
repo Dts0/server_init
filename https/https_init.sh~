@@ -1,0 +1,10 @@
+#!/bin/sh
+curl https://get.acme.sh | sh
+
+acme.sh --issue -d www.dreamoftime0.com --apache
+#this will exec every 60 days autoly
+
+acme.sh --installcert -d www.dreamoftime0.com --cert-file /etc/httpd/ssl/dreamoftime0.com.pem --key-file /etc/httpd/ssl/dreamoftime0.com.key --fullchain-file /etc/httpd/ssl/dreamoftime0.com.cer --reloadcmd "service httpd force-reload"
+#一定记住，这里的文件是要放东西的输出文件，不是输入文件
+
+#enjoy the https
